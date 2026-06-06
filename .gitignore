@@ -1,0 +1,19 @@
+# Secrets — never commit these
+.env
+token.json
+credentials.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# Runtime
+logs/*.log
+logs/pipeline_runs.json
+resumes/
+
+# OS
+.DS_Store
+Thumbs.db

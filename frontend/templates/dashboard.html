@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Recruiter Copilot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #f5f0e8;
+      --bg-2:     #ede8de;
+      --surface:  #e8e2d6;
+      --border:   #d6cfc3;
+      --ink:      #1a1612;
+      --ink-2:    #7a6f62;
+      --ink-3:    #b5ab9e;
+      --gold:     #b8760a;
+      --blue:     #2c5fa8;
+      --amber:    #c45c00;
+      --red:      #a83228;
+      --font:     'Geist', system-ui, sans-serif;
+      --mono:     'Geist Mono', monospace;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--font);
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+    }
+
+    /* ─── Shell ──────────────────────────────────── */
+    .shell {
+      display: grid;
+      grid-template-rows: 44px 1fr 100px;
+      height: 100vh;
+    }
+
+    /* ─── Top bar ────────────────────────────────── */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 32px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-2);
+    }
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .wordmark {
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      color: var(--ink);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .wordmark-icon {
+      width: 16px;
+      height: 16px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      display: grid;
+      place-items: center;
+    }
+    .pipe { width: 1px; height: 14px; background: var(--border); }
+    .topbar-stats {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink-2);
+    }
+    .topbar-stats b { color: var(--ink); font-weight: 500; }
+    .topbar-stats .lime { color: var(--gold); }
+    .topbar-right {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink-3);
+    }
+
+    /* ─── Main: full-page candidate view ─────────── */
+    .stage {
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 0 10vw;
+    }
+
+    /* Candidate page (one visible at a time) */
+    .candidate-page {
+      position: absolute;
+      inset: 0;
+      padding: 0 10vw;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 0;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(16px);
+      transition: opacity 220ms ease, transform 220ms ease;
+    }
+    .candidate-page.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: none;
+    }
+
+    /* Name + score row */
+    .page-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .page-name {
+      font-size: clamp(36px, 5vw, 64px);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      color: var(--ink);
+      flex: 1;
+    }
+    .page-score-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .page-score {
+      font-family: var(--mono);
+      font-size: clamp(48px, 6vw, 80px);
+      font-weight: 600;
+      letter-spacing: -0.05em;
+      line-height: 1;
+    }
+    .page-score.c-lime  { color: var(--gold); }
+    .page-score.c-blue  { color: var(--blue); }
+    .page-score.c-amber { color: var(--amber); }
+    .page-score.c-red   { color: var(--red); }
+    .page-tier {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--ink-2);
+    }
+
+    /* Meta row: email · phone · interview */
+    .page-meta {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 14px 0;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--ink-2);
+      border-bottom: 1px solid var(--border);
+    }
+    .meta-dot { color: var(--ink-3); }
+    .meta-interview { margin-left: auto; }
+    .meta-interview.scheduled { color: var(--gold); }
+
+    /* Metrics row — 4 numbers across, no boxes */
+    .page-metrics {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      padding: 20px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .metric {
+      padding-right: 24px;
+    }
+    .metric:not(:first-child) {
+      padding-left: 24px;
+      border-left: 1px solid var(--border);
+    }
+    .metric-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      margin-bottom: 6px;
+    }
+    .metric-value {
+      font-family: var(--mono);
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      color: var(--ink);
+    }
+    .metric-bar {
+      margin-top: 8px;
+      height: 1px;
+      background: var(--border);
+      position: relative;
+    }
+    .metric-bar-fill {
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      background: var(--ink-3);
+      transition: width 500ms cubic-bezier(0.16,1,0.3,1);
+    }
+    .metric-bar-fill.c-lime  { background: var(--gold); }
+    .metric-bar-fill.c-blue  { background: var(--blue); }
+    .metric-bar-fill.c-amber { background: var(--amber); }
+    .metric-bar-fill.c-red   { background: var(--red); }
+
+    /* Summary + flags */
+    .page-body {
+      display: grid;
+      grid-template-columns: 1fr 280px;
+      gap: 40px;
+      padding-top: 20px;
+    }
+    .page-summary {
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--ink-2);
+      max-width: 65ch;
+    }
+    .page-summary strong {
+      color: var(--ink);
+      font-weight: 500;
+    }
+    .page-flags {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .flag-group-label {
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      margin-bottom: 6px;
+    }
+    .flag-list {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      list-style: none;
+    }
+    .flag-list li {
+      font-size: 12px;
+      color: var(--ink-2);
+      line-height: 1.5;
+      display: flex;
+      align-items: baseline;
+      gap: 7px;
+    }
+    .flag-list li::before {
+      font-family: var(--mono);
+      font-size: 10px;
+      flex-shrink: 0;
+    }
+    .flag-list.strengths li::before { content: '+'; color: var(--gold); opacity: 0.9; }
+    .flag-list.gaps      li::before { content: '−'; color: var(--red);  opacity: 0.6; }
+
+    /* ─── Bottom navigation strip ────────────────── */
+    .nav-strip {
+      border-top: 1px solid var(--border);
+      background: var(--bg-2);
+      display: flex;
+      align-items: stretch;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .nav-strip::-webkit-scrollbar { display: none; }
+
+    .nav-item {
+      flex: 1;
+      min-width: 100px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 0 20px;
+      cursor: pointer;
+      border-right: 1px solid var(--border);
+      transition: background 120ms;
+      position: relative;
+    }
+    .nav-item:last-child { border-right: none; }
+    .nav-item:hover { background: var(--surface); }
+    .nav-item.active { background: var(--surface); }
+    .nav-item.active::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--ink-3);
+    }
+    .nav-item[data-tier="exceptional"].active::after { background: var(--gold); }
+    .nav-item[data-tier="strong"].active::after      { background: var(--blue); }
+    .nav-item[data-tier="moderate"].active::after    { background: var(--amber); }
+    .nav-item[data-tier="weak"].active::after        { background: var(--red); }
+
+    .nav-rank {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--ink-3);
+      letter-spacing: 0.04em;
+      margin-bottom: 3px;
+    }
+    .nav-name {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--ink-2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      letter-spacing: -0.01em;
+      transition: color 120ms;
+    }
+    .nav-item.active .nav-name { color: var(--ink); }
+    .nav-score {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 600;
+      margin-top: 2px;
+    }
+    .nav-score.c-lime  { color: var(--gold); }
+    .nav-score.c-blue  { color: var(--blue); }
+    .nav-score.c-amber { color: var(--amber); }
+    .nav-score.c-red   { color: var(--red); }
+
+    /* ─── Keyboard nav hint ──────────────────────── */
+    .key-hint {
+      position: fixed;
+      bottom: 110px;
+      right: 28px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--ink-3);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      user-select: none;
+      pointer-events: none;
+    }
+    .key {
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-size: 9px;
+      color: var(--ink-2);
+    }
+
+    /* ─── Pipeline link ────────────────────────── */
+    .pipeline-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 12px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink-2);
+      text-decoration: none;
+      transition: background 120ms, color 120ms;
+    }
+    .pipeline-link:hover { background: var(--surface); color: var(--ink); }
+
+    /* ─── Reply button ──────────────────────────── */
+    .reply-area {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .btn-reply {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 16px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: transparent;
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      color: var(--ink);
+      transition: background 120ms;
+    }
+    .btn-reply:hover { background: var(--surface); }
+    .btn-reply.shortlist { border-color: var(--gold); color: var(--gold); }
+    .btn-reply.shortlist:hover { background: #fdf3dc; }
+    .btn-reply.reject   { border-color: var(--red);  color: var(--red);  }
+    .btn-reply.reject:hover { background: #fde8e6; }
+
+    /* ─── Reply modal ────────────────────────────── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(28,24,16,.55);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 28px;
+      width: min(540px, 90vw);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .modal-title { font-size: 15px; font-weight: 600; }
+    .modal-sub { font-size: 12px; color: var(--ink-2); font-family: var(--mono); }
+    .modal-field { font-size: 12px; color: var(--ink-2); font-weight: 500; text-transform: uppercase; letter-spacing: .05em; margin-top: 4px; }
+    .modal-value {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 14px;
+      white-space: pre-wrap;
+      line-height: 1.6;
+      min-height: 80px;
+      color: var(--ink);
+    }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+    .modal-btn {
+      padding: 7px 16px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: transparent;
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      color: var(--ink);
+      transition: background 120ms;
+    }
+    .modal-btn:hover { background: var(--surface); }
+    .modal-btn.primary { background: var(--gold); color: #fff; border-color: var(--gold); }
+    .modal-btn.primary:hover { opacity: .88; }
+    .modal-loading { color: var(--muted); font-size: 12px; font-family: var(--mono); }
+
+    @media (prefers-reduced-motion: reduce) {
+      .candidate-page, .metric-bar-fill { transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- Top bar -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="wordmark">
+        <div class="wordmark-icon">
+          <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+            <rect x="1" y="1" width="2" height="2" fill="#9a8f82"/>
+            <rect x="5" y="1" width="2" height="2" fill="#9a8f82"/>
+            <rect x="1" y="5" width="2" height="2" fill="#9a8f82"/>
+            <rect x="5" y="5" width="2" height="2" fill="#c4b9ac"/>
+          </svg>
+        </div>
+        Recruiter Copilot
+      </div>
+      <div class="pipe"></div>
+      <div class="topbar-stats">
+        <span><b>{{ stats.total }}</b> reviewed</span>
+        <span class="lime"><b>{{ stats.exceptional }}</b> exceptional</span>
+        <span><b>{{ stats.scheduled }}</b> scheduled</span>
+        <span><b>{{ stats.rejected }}</b> rejected</span>
+      </div>
+    </div>
+    <div class="topbar-right" style="display:flex;align-items:center;gap:14px">
+      <a href="/pipeline" class="pipeline-link">
+        <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="5" cy="12" r="3"/><circle cx="19" cy="5" r="3"/><circle cx="19" cy="19" r="3"/><line x1="8" y1="11.3" x2="16" y2="6.7"/><line x1="8" y1="12.7" x2="16" y2="17.3"/></svg>
+        Pipeline
+      </a>
+      <span>{{ now }}</span>
+    </div>
+  </header>
+
+  <!-- Stage: full-page candidate views -->
+  <div class="stage" id="stage">
+    {% if not candidates %}
+    <div style="text-align:center;color:var(--ink-2);font-size:14px;line-height:2">
+      <div style="font-size:36px;margin-bottom:12px">📭</div>
+      <div style="font-weight:600;color:var(--ink)">No candidates yet</div>
+      <div style="font-size:13px;margin-top:6px">Run the pipeline to fetch and screen resume emails.</div>
+      <a href="/pipeline" style="display:inline-block;margin-top:18px;padding:8px 20px;border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--gold);font-size:13px;font-weight:500">Go to Pipeline →</a>
+    </div>
+    {% endif %}
+    {% for c in candidates %}
+    {% set score = c.score or 0 %}
+    {% set tier  = c.tier or '' %}
+    {% if tier == 'exceptional' %}{% set cc = 'c-lime' %}
+    {% elif tier == 'strong' %}{% set cc = 'c-blue' %}
+    {% elif tier == 'moderate' %}{% set cc = 'c-amber' %}
+    {% else %}{% set cc = 'c-red' %}{% endif %}
+
+    {% if c.interview_date %}
+      {% set idate_raw = c.interview_date %}
+    {% else %}
+      {% set idate_raw = '' %}
+    {% endif %}
+
+    <div class="candidate-page {% if loop.first %}active{% endif %}"
+         data-idx="{{ loop.index0 }}"
+         id="page-{{ loop.index0 }}">
+
+      <!-- Name + score -->
+      <div class="page-head">
+        <div class="page-name">{{ c.name }}</div>
+        <div class="page-score-wrap">
+          <div class="page-score {{ cc }}">{{ score }}</div>
+          <div class="page-tier">{{ tier }}</div>
+        </div>
+      </div>
+
+      <!-- Meta -->
+      <div class="page-meta">
+        <span>{{ c.email }}</span>
+        {% if c.phone %}
+        <span class="meta-dot">·</span>
+        <span>{{ c.phone }}</span>
+        {% endif %}
+        <span class="meta-interview {% if c.interview_date %}scheduled{% endif %}">
+          {% if c.interview_date %}
+            ✓ Interview scheduled
+          {% else %}
+            — No interview
+          {% endif %}
+        </span>
+      </div>
+
+      <!-- Metrics row -->
+      <div class="page-metrics">
+        {% for label, val in [
+          ('Technical',     c.technical_score or score),
+          ('Experience',    c.experience_score or score),
+          ('Education',     c.education_score or score),
+          ('Communication', c.communication_score or score)
+        ] %}
+        <div class="metric">
+          <div class="metric-label">{{ label }}</div>
+          <div class="metric-value">{{ val }}</div>
+          <div class="metric-bar">
+            <div class="metric-bar-fill {{ cc }}" style="width:{{ val }}%"></div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <!-- Summary + flags -->
+      <div class="page-body">
+        <div>
+          <p class="page-summary">{{ c.summary or '' }}</p>
+          <!-- Reply buttons -->
+          <div class="reply-area">
+            <button class="btn-reply shortlist"
+              onclick="openReply({{ loop.index0 }}, 'shortlist')">
+              ✉ Shortlist Email
+            </button>
+            <button class="btn-reply reject"
+              onclick="openReply({{ loop.index0 }}, 'rejection')">
+              ✗ Rejection Email
+            </button>
+          </div>
+        </div>
+        <div class="page-flags">
+          {% if c.strengths %}
+          <div>
+            <div class="flag-group-label">Strengths</div>
+            <ul class="flag-list strengths">
+              {% for s in c.strengths %}
+              <li>{{ s }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+          {% if c.gaps %}
+          <div>
+            <div class="flag-group-label">Gaps</div>
+            <ul class="flag-list gaps">
+              {% for g in c.gaps %}
+              <li>{{ g }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Bottom nav strip -->
+  <nav class="nav-strip" id="nav-strip">
+    {% for c in candidates %}
+    {% set score = c.score or 0 %}
+    {% set tier  = c.tier or '' %}
+    {% if tier == 'exceptional' %}{% set cc = 'c-lime' %}
+    {% elif tier == 'strong' %}{% set cc = 'c-blue' %}
+    {% elif tier == 'moderate' %}{% set cc = 'c-amber' %}
+    {% else %}{% set cc = 'c-red' %}{% endif %}
+
+    <div class="nav-item {% if loop.first %}active{% endif %}"
+         data-idx="{{ loop.index0 }}"
+         data-tier="{{ tier }}"
+         onclick="go({{ loop.index0 }})">
+      <div class="nav-rank">{{ '%02d' % loop.index }}</div>
+      <div class="nav-name">{{ c.name }}</div>
+      <div class="nav-score {{ cc }}">{{ score }}</div>
+    </div>
+    {% endfor %}
+  </nav>
+
+</div>
+
+<!-- Keyboard hint -->
+<div class="key-hint">
+  <span class="key">←</span>
+  <span class="key">→</span>
+  navigate
+</div>
+
+<!-- Reply modal -->
+<div class="modal-overlay" id="reply-modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div>
+      <div class="modal-title" id="modal-title">Draft Email</div>
+      <div class="modal-sub" id="modal-sub"></div>
+    </div>
+    <div id="modal-loading" class="modal-loading" style="display:none">Drafting with Groq Llama 3.3-70b...</div>
+    <div id="modal-body" style="display:none">
+      <div class="modal-field">Subject</div>
+      <div class="modal-value" id="modal-subject" style="min-height:auto;padding:8px 14px"></div>
+      <div class="modal-field" style="margin-top:10px">Body</div>
+      <div class="modal-value" id="modal-body-text"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn" onclick="closeModal()">Close</button>
+      <button class="modal-btn primary" onclick="copyDraft()">Copy to clipboard</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const TOTAL = {{ candidates | length }};
+let current = 0;
+if (TOTAL === 0) { document.querySelector('.key-hint').style.display = 'none'; }
+
+function go(idx) {
+  if (idx < 0 || idx >= TOTAL) return;
+
+  // Deactivate old
+  document.getElementById('page-' + current)?.classList.remove('active');
+  document.querySelector('.nav-item[data-idx="' + current + '"]')?.classList.remove('active');
+
+  current = idx;
+
+  // Activate new
+  document.getElementById('page-' + current)?.classList.add('active');
+  const navItem = document.querySelector('.nav-item[data-idx="' + current + '"]');
+  navItem?.classList.add('active');
+  navItem?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown')  { e.preventDefault(); go(current + 1); }
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')    { e.preventDefault(); go(current - 1); }
+  if (e.key === 'Escape') closeModal();
+});
+
+// ── Candidate data for reply ──────────────────────────────────
+const CANDIDATES = {{ candidates | tojson }};
+
+async function openReply(idx, type) {
+  const c = CANDIDATES[idx];
+  const modal = document.getElementById('reply-modal');
+  modal.classList.add('open');
+  document.getElementById('modal-title').textContent =
+    type === 'shortlist' ? `Shortlist Email — ${c.name}` : `Rejection Email — ${c.name}`;
+  document.getElementById('modal-sub').textContent =
+    `${c.email}  ·  Score ${c.score}  ·  ${c.tier}`;
+  document.getElementById('modal-loading').style.display = 'block';
+  document.getElementById('modal-body').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/reply', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({candidate: c, type}),
+    });
+    const data = await res.json();
+    document.getElementById('modal-loading').style.display = 'none';
+    document.getElementById('modal-body').style.display = 'block';
+    document.getElementById('modal-subject').textContent = data.subject || '(no subject)';
+    document.getElementById('modal-body-text').textContent = data.body || data.error || '(empty)';
+  } catch(e) {
+    document.getElementById('modal-loading').style.display = 'none';
+    document.getElementById('modal-body').style.display = 'block';
+    document.getElementById('modal-subject').textContent = 'Error';
+    document.getElementById('modal-body-text').textContent = e.message;
+  }
+}
+
+function closeModal() {
+  document.getElementById('reply-modal').classList.remove('open');
+}
+
+function copyDraft() {
+  const subject = document.getElementById('modal-subject').textContent;
+  const body    = document.getElementById('modal-body-text').textContent;
+  const text = `Subject: ${subject}\n\n${body}`;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.modal-btn.primary');
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = orig, 1500);
+  });
+}
+</script>
+
+</body>
+</html>

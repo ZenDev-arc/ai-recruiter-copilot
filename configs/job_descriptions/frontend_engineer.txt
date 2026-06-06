@@ -1,0 +1,18 @@
+Role: Frontend Engineer
+Location: Hybrid
+Experience: 2+ years
+
+We are building consumer-facing products and need a frontend engineer who cares deeply about UX and performance.
+
+Requirements:
+- 2+ years React or Vue.js in production
+- Strong TypeScript skills
+- Experience with state management (Redux, Zustand, or Pinia)
+- Understanding of web performance, accessibility (WCAG AA)
+- Ability to work closely with designers
+
+Nice to have:
+- Next.js or Nuxt experience
+- Animation and interaction design skills
+- Prior experience at a product company
+- Contributions to design systems

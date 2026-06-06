@@ -1,0 +1,18 @@
+Role: Machine Learning Engineer
+Location: Remote
+Experience: 2+ years
+
+We need an ML engineer who can take models from research to production. Strong Python and data skills required.
+
+Requirements:
+- 2+ years Python with ML focus (PyTorch or TensorFlow)
+- Experience training and deploying models at scale
+- Strong SQL and data pipeline skills (Spark, dbt, or Airflow)
+- Familiarity with MLOps tools (MLflow, Weights & Biases)
+- MS/PhD in CS, Statistics, or related field preferred
+
+Nice to have:
+- Published research or Kaggle experience
+- NLP or computer vision specialization
+- Experience with LLMs and prompt engineering
+- Cloud ML platforms (SageMaker, Vertex AI)

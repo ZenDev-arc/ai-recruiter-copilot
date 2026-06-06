@@ -1,4 +1,18 @@
-Role: Software Engineer
-Skills: Python, SQL, REST APIs
-Experience: 2+ years software development
-Education: B.Tech in CS, MCA, or equivalent
+Role: Senior Software Engineer
+Location: Remote / Hybrid
+Experience: 3+ years
+
+We are looking for a backend-focused engineer with strong Python skills who can design, build and maintain scalable APIs and data pipelines.
+
+Requirements:
+- 3+ years professional Python experience (FastAPI, Django, or Flask)
+- Strong SQL/PostgreSQL skills
+- Experience with cloud platforms (AWS, GCP, or Azure)
+- Familiarity with Docker and CI/CD pipelines
+- Clear written and verbal communication
+
+Nice to have:
+- Open source contributions
+- Experience with distributed systems or message queues
+- Machine learning or data engineering background
+- Prior startup or fintech experience

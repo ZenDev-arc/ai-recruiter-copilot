@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pipeline — AI Recruiter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:      #f5f0e8;
+    --surface: #eee8d8;
+    --ink:     #1c1810;
+    --muted:   #7a6f5e;
+    --gold:    #b8760a;
+    --gold2:   #c98a1a;
+    --amber:   #c45c00;
+    --green:   #2d7a3a;
+    --red:     #a83228;
+    --blue:    #2c5fa8;
+    --border:  #d8cebb;
+    --node-w:  140px;
+    --node-h:  90px;
+    --r:       8px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Geist',sans-serif;
+    font-size:14px;
+    min-height:100vh;
+  }
+
+  /* ─── Nav ─────────────────────────────────────────────────── */
+  nav{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 32px;border-bottom:1px solid var(--border);
+    background:var(--bg);position:sticky;top:0;z-index:100;
+  }
+  .nav-brand{font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}
+  .nav-links{display:flex;gap:24px;align-items:center}
+  .nav-links a{text-decoration:none;color:var(--muted);font-size:13px;font-weight:500;transition:color .15s}
+  .nav-links a:hover,.nav-links a.active{color:var(--ink)}
+  .nav-links a.active{border-bottom:1.5px solid var(--gold);padding-bottom:2px}
+  .nav-time{font-size:12px;color:var(--muted);font-family:'Geist Mono',monospace}
+
+  /* ─── Layout ────────────────────────────────────────────────── */
+  .page{padding:32px;max-width:1200px;margin:0 auto}
+  .page-header{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:32px}
+  .page-title{font-size:22px;font-weight:600;letter-spacing:-.01em}
+  .page-sub{font-size:13px;color:var(--muted);margin-top:4px}
+
+  /* ─── Controls ──────────────────────────────────────────────── */
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  select.role-select{
+    font-family:'Geist',sans-serif;font-size:13px;
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--r);padding:8px 12px;color:var(--ink);
+    cursor:pointer;outline:none;
+  }
+  .btn{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:8px 18px;border-radius:var(--r);border:none;
+    font-family:'Geist',sans-serif;font-size:13px;font-weight:500;
+    cursor:pointer;transition:opacity .15s;
+  }
+  .btn-primary{background:var(--gold);color:#fff}
+  .btn-primary:hover{opacity:.88}
+  .btn-primary:disabled{opacity:.45;cursor:not-allowed}
+  .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--ink)}
+  .btn-ghost:hover{background:var(--surface)}
+
+  /* ─── Graph canvas ──────────────────────────────────────────── */
+  .graph-wrap{
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;padding:40px 32px;overflow-x:auto;
+    margin-bottom:28px;position:relative;
+  }
+  .graph-svg-wrap{
+    display:flex;align-items:center;justify-content:center;
+    min-width:700px;
+  }
+  svg.pipeline-svg{overflow:visible}
+
+  /* ─── Node styles ───────────────────────────────────────────── */
+  .pipeline-node{cursor:default;transition:filter .15s}
+  .node-body{
+    rx:8;ry:8;
+    fill:var(--bg);stroke:var(--border);stroke-width:1.5;
+    transition:stroke .3s, fill .3s;
+  }
+  .node-icon-bg{rx:6;ry:6}
+  .node-label{
+    font-family:'Geist',sans-serif;font-size:12px;font-weight:600;
+    fill:var(--ink);text-anchor:middle;dominant-baseline:middle;
+  }
+  .node-sub{
+    font-family:'Geist Mono',monospace;font-size:10px;
+    fill:var(--muted);text-anchor:middle;dominant-baseline:middle;
+  }
+  .node-badge{
+    font-family:'Geist Mono',monospace;font-size:10px;font-weight:600;
+    text-anchor:middle;dominant-baseline:middle;
+  }
+  .conn-path{fill:none;stroke:var(--border);stroke-width:2;stroke-dasharray:5 4;transition:stroke .3s}
+
+  /* node states */
+  .node--idle    .node-body{stroke:var(--border);fill:var(--bg)}
+  .node--running .node-body{stroke:var(--gold);fill:#fdf6e3;stroke-width:2}
+  .node--done    .node-body{stroke:var(--green);fill:#f0faf2;stroke-width:1.5}
+  .node--error   .node-body{stroke:var(--red);fill:#fdf0ef;stroke-width:2}
+  .node--running .conn-path{stroke:var(--gold)}
+  .node--done    .conn-path{stroke:var(--green)}
+
+  /* running pulse ring */
+  .pulse-ring{
+    rx:10;ry:10;
+    fill:none;stroke:var(--gold);stroke-width:2;opacity:0;
+    transform-origin:center;
+  }
+  .node--running .pulse-ring{animation:pulse 1.2s ease-out infinite}
+  @keyframes pulse{
+    0%{opacity:.7;r:0}
+    100%{opacity:0;r:12}
+  }
+
+  /* ─── Status bar ─────────────────────────────────────────────── */
+  .status-bar{
+    display:flex;align-items:center;gap:12px;
+    padding:10px 18px;background:var(--bg);border:1px solid var(--border);
+    border-radius:var(--r);font-size:12px;font-family:'Geist Mono',monospace;
+    margin-bottom:24px;
+  }
+  .status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .status-dot.idle   {background:var(--muted)}
+  .status-dot.running{background:var(--gold);animation:blink 1s ease-in-out infinite}
+  .status-dot.done   {background:var(--green)}
+  .status-dot.error  {background:var(--red)}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+  #status-text{flex:1;color:var(--ink)}
+  #elapsed{color:var(--muted)}
+
+  /* ─── Log panel ───────────────────────────────────────────────── */
+  .log-panel{
+    background:#1c1810;border-radius:10px;padding:18px 20px;
+    height:220px;overflow-y:auto;
+    font-family:'Geist Mono',monospace;font-size:12px;line-height:1.7;
+    margin-bottom:28px;
+  }
+  .log-line{white-space:pre-wrap;word-break:break-all}
+  .log-line.node  {color:#c98a1a}
+  .log-line.ok    {color:#5dba6f}
+  .log-line.err   {color:#e06c6c}
+  .log-line.info  {color:#8da8d0}
+  .log-line.plain {color:#a09880}
+
+  /* ─── Run history ─────────────────────────────────────────────── */
+  h2.section-title{font-size:14px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:16px}
+  .runs-table{width:100%;border-collapse:collapse;font-size:13px}
+  .runs-table th{text-align:left;padding:8px 14px;color:var(--muted);font-weight:500;border-bottom:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+  .runs-table td{padding:10px 14px;border-bottom:1px solid var(--border)}
+  .runs-table tr:last-child td{border-bottom:none}
+  .runs-table tr:hover td{background:var(--surface)}
+  .tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;font-family:'Geist Mono',monospace}
+  .tag-done  {background:#d4edda;color:#1a6b28}
+  .tag-error {background:#fde8e6;color:#8b1f1a}
+  .tag-running{background:#fdf3dc;color:#8b5e00}
+  .empty-state{text-align:center;padding:40px;color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="nav-brand">AI Recruiter</span>
+  <div class="nav-links">
+    <a href="/">Dashboard</a>
+    <a href="/pipeline" class="active">Pipeline</a>
+  </div>
+  <span class="nav-time">{{ now }}</span>
+</nav>
+
+<div class="page">
+  <!-- Header -->
+  <div class="page-header">
+    <div>
+      <div class="page-title">Pipeline Visualizer</div>
+      <div class="page-sub">Live view of the Gmail → Groq → Sheets screening pipeline</div>
+    </div>
+    <div class="controls">
+      <select class="role-select" id="role-select">
+        {% for r in roles %}
+        <option value="{{ r.slug }}">{{ r.label }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn btn-primary" id="run-btn" onclick="startRun()">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg>
+        Run Now
+      </button>
+    </div>
+  </div>
+
+  <!-- Graph -->
+  <div class="graph-wrap">
+    <div class="graph-svg-wrap">
+      <!-- 5 nodes: Gmail → PDF Parser → Groq Screener → Calendar → Sheets -->
+      <!--
+        Layout (all Y centred at 80):
+        Node 0 Gmail:      x=10   w=150  right-edge=160
+        Arrow 0→1:         160→210
+        Node 1 PDF:        x=210  w=140  right-edge=350
+        Arrow 1→2:         350→400
+        Node 2 Screener:   x=400  w=155  right-edge=555
+        Arrow 2→3:         555→605
+        Node 3 Calendar:   x=605  w=145  right-edge=750
+        Arrow 3→4:         750→800
+        Node 4 Sheets:     x=800  w=130  right-edge=930
+        Total viewBox: 940 x 160
+      -->
+      <svg class="pipeline-svg" width="940" height="160" viewBox="0 0 940 160">
+        <defs>
+          <marker id="arrow-idle" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#d8cebb"/>
+          </marker>
+        </defs>
+
+        <!-- Arrows -->
+        <line id="arr-0" x1="160" y1="80" x2="207" y2="80" stroke="var(--border)" stroke-width="1.5" marker-end="url(#arrow-idle)"/>
+        <line id="arr-1" x1="350" y1="80" x2="397" y2="80" stroke="var(--border)" stroke-width="1.5" marker-end="url(#arrow-idle)"/>
+        <line id="arr-2" x1="555" y1="80" x2="602" y2="80" stroke="var(--border)" stroke-width="1.5" marker-end="url(#arrow-idle)"/>
+        <line id="arr-3" x1="750" y1="80" x2="797" y2="80" stroke="var(--border)" stroke-width="1.5" marker-end="url(#arrow-idle)"/>
+
+        <!-- NODE 0: Gmail -->
+        <g class="pipeline-node node--idle" id="node-gmail" transform="translate(10,25)">
+          <rect class="node-body" x="0" y="0" width="150" height="110" rx="10" ry="10"/>
+          <rect x="12" y="12" width="34" height="34" rx="6" ry="6" fill="#f0e8d8"/>
+          <text x="29" y="30" text-anchor="middle" dominant-baseline="middle" font-size="17">📧</text>
+          <text class="node-label" x="75" y="64">Gmail</text>
+          <text class="node-sub"   x="75" y="80">Email Monitor</text>
+          <text class="node-badge" id="badge-gmail" x="75" y="97" fill="var(--muted)">idle</text>
+        </g>
+
+        <!-- NODE 1: PDF Parser -->
+        <g class="pipeline-node node--idle" id="node-pdf_parser" transform="translate(210,25)">
+          <rect class="node-body" x="0" y="0" width="140" height="110" rx="10" ry="10"/>
+          <rect x="12" y="12" width="34" height="34" rx="6" ry="6" fill="#f0e8d8"/>
+          <text x="29" y="30" text-anchor="middle" dominant-baseline="middle" font-size="17">📄</text>
+          <text class="node-label" x="70" y="64">PDF Parser</text>
+          <text class="node-sub"   x="70" y="80">Resume Extractor</text>
+          <text class="node-badge" id="badge-pdf_parser" x="70" y="97" fill="var(--muted)">idle</text>
+        </g>
+
+        <!-- NODE 2: Groq Screener -->
+        <g class="pipeline-node node--idle" id="node-screener" transform="translate(400,25)">
+          <rect class="node-body" x="0" y="0" width="155" height="110" rx="10" ry="10"/>
+          <rect x="12" y="12" width="34" height="34" rx="6" ry="6" fill="#f0e8d8"/>
+          <text x="29" y="30" text-anchor="middle" dominant-baseline="middle" font-size="17">🤖</text>
+          <text class="node-label" x="77" y="64">Groq Screener</text>
+          <text class="node-sub"   x="77" y="80">Llama 3.3-70b</text>
+          <text class="node-badge" id="badge-screener" x="77" y="97" fill="var(--muted)">idle</text>
+        </g>
+
+        <!-- NODE 3: Calendar -->
+        <g class="pipeline-node node--idle" id="node-calendar" transform="translate(605,25)">
+          <rect class="node-body" x="0" y="0" width="145" height="110" rx="10" ry="10"/>
+          <rect x="12" y="12" width="34" height="34" rx="6" ry="6" fill="#f0e8d8"/>
+          <text x="29" y="30" text-anchor="middle" dominant-baseline="middle" font-size="17">📅</text>
+          <text class="node-label" x="72" y="64">Calendar</text>
+          <text class="node-sub"   x="72" y="80">Google Calendar</text>
+          <text class="node-badge" id="badge-calendar" x="72" y="97" fill="var(--muted)">idle</text>
+        </g>
+
+        <!-- NODE 4: Sheets -->
+        <g class="pipeline-node node--idle" id="node-sheets" transform="translate(800,25)">
+          <rect class="node-body" x="0" y="0" width="132" height="110" rx="10" ry="10"/>
+          <rect x="12" y="12" width="34" height="34" rx="6" ry="6" fill="#f0e8d8"/>
+          <text x="29" y="30" text-anchor="middle" dominant-baseline="middle" font-size="17">📊</text>
+          <text class="node-label" x="66" y="64">Sheets</text>
+          <text class="node-sub"   x="66" y="80">Google Sheets</text>
+          <text class="node-badge" id="badge-sheets" x="66" y="97" fill="var(--muted)">idle</text>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Status bar -->
+  <div class="status-bar">
+    <div class="status-dot idle" id="status-dot"></div>
+    <span id="status-text">Ready. Select a role and click Run Now.</span>
+    <span id="elapsed"></span>
+  </div>
+
+  <!-- Log panel -->
+  <div class="log-panel" id="log-panel">
+    <div class="log-line plain">// pipeline log will appear here during run</div>
+  </div>
+
+  <!-- Run history -->
+  <h2 class="section-title">Run History</h2>
+  <table class="runs-table" id="runs-table">
+    <thead>
+      <tr>
+        <th>Run ID</th>
+        <th>Started</th>
+        <th>Duration</th>
+        <th>Candidates</th>
+        <th>Scheduled</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody id="runs-tbody">
+      {% if runs %}
+        {% for run in runs %}
+        <tr>
+          <td style="font-family:'Geist Mono',monospace;font-size:11px;color:var(--muted)">{{ run.run_id }}</td>
+          <td>{{ run.started_at[:16].replace("T"," ") if run.started_at else "—" }}</td>
+          <td style="font-family:'Geist Mono',monospace">{{ run.duration_s|round(1) if run.duration_s else "—" }}s</td>
+          <td>{{ run.candidates_found or 0 }}</td>
+          <td>{{ run.interviews_scheduled or 0 }}</td>
+          <td><span class="tag tag-{{ run.status or 'done' }}">{{ run.status or 'done' }}</span></td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td colspan="6" class="empty-state">No pipeline runs yet. Click Run Now to start.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+// ── Node state management ─────────────────────────────────────
+const NODES = ['gmail','pdf_parser','screener','calendar','sheets'];
+const NODE_IDX = {gmail:0,pdf_parser:1,screener:2,calendar:3,sheets:4};
+
+function setNodeState(name, state, badge='') {
+  const el = document.getElementById(`node-${name}`);
+  if (!el) return;
+  el.className = `pipeline-node node--${state}`;
+  const b = document.getElementById(`badge-${name}`);
+  if (b && badge) b.textContent = badge;
+
+  // color the arrow that leads OUT of the previous node INTO this one
+  const idx = NODE_IDX[name];
+  if (idx > 0) {
+    const color = state === 'done' ? 'var(--green)' : state === 'running' ? 'var(--gold)' : state === 'error' ? 'var(--red)' : 'var(--border)';
+    const a = document.getElementById(`arr-${idx-1}`);
+    if (a) a.setAttribute('stroke', color);
+  }
+}
+
+function resetNodes() {
+  NODES.forEach(n => setNodeState(n, 'idle', 'idle'));
+  // reset arrows
+  ['arr-0','arr-1','arr-2','arr-3','arr-3b'].forEach(id => {
+    const a = document.getElementById(id);
+    if (a) { a.setAttribute('stroke', 'var(--border)'); a.setAttribute('marker-end', 'url(#arrow-idle)'); }
+  });
+}
+
+// ── Status helpers ────────────────────────────────────────────
+function setStatus(state, text) {
+  const dot = document.getElementById('status-dot');
+  dot.className = `status-dot ${state}`;
+  document.getElementById('status-text').textContent = text;
+}
+
+// ── Log helpers ───────────────────────────────────────────────
+function appendLog(line, cls='plain') {
+  const panel = document.getElementById('log-panel');
+  const div = document.createElement('div');
+  div.className = `log-line ${cls}`;
+  div.textContent = line;
+  panel.appendChild(div);
+  panel.scrollTop = panel.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('log-panel').innerHTML = '';
+}
+
+function classifyLine(line) {
+  if (line.startsWith('NODE:')) return 'node';
+  if (/\[OK\]|done|success|scheduled|saved/i.test(line)) return 'ok';
+  if (/error|fail|exception/i.test(line)) return 'err';
+  if (/INFO|starting|fetching|processing|screening/i.test(line)) return 'info';
+  return 'plain';
+}
+
+// ── Main run logic ────────────────────────────────────────────
+let _startTime = null;
+let _timer = null;
+
+async function startRun() {
+  const btn  = document.getElementById('run-btn');
+  const role = document.getElementById('role-select').value;
+  btn.disabled = true;
+  clearLog();
+  resetNodes();
+  setStatus('running', 'Starting pipeline...');
+  appendLog(`>> Starting pipeline for role: ${role}`, 'info');
+
+  _startTime = Date.now();
+  _timer = setInterval(() => {
+    const s = ((Date.now() - _startTime) / 1000).toFixed(1);
+    document.getElementById('elapsed').textContent = `${s}s elapsed`;
+  }, 200);
+
+  // POST to start run, get run_id
+  let runId;
+  try {
+    const res = await fetch('/api/pipeline/run', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({role}),
+    });
+    const data = await res.json();
+    runId = data.run_id;
+  } catch(e) {
+    setStatus('error', 'Failed to start run: ' + e.message);
+    appendLog('ERROR: ' + e.message, 'err');
+    btn.disabled = false;
+    clearInterval(_timer);
+    return;
+  }
+
+  appendLog(`>> Run ID: ${runId}`, 'info');
+
+  // Open SSE stream
+  const es = new EventSource(`/api/pipeline/stream/${runId}`);
+
+  es.addEventListener('message', e => {
+    const {line} = JSON.parse(e.data);
+    const cls = classifyLine(line);
+    appendLog(line, cls);
+
+    // Parse NODE: tags
+    // Format: NODE:<name>:<status>:<count>
+    const m = line.match(/^NODE:(\w+):(running|done|error):?(\d*)/);
+    if (m) {
+      const [, name, state, count] = m;
+      let badge = state;
+      if (state === 'done' && count) badge = `${count} processed`;
+      if (state === 'running')       badge = 'running...';
+      if (state === 'error')         badge = 'error';
+      setNodeState(name, state, badge);
+
+      if (state === 'running') setStatus('running', `${name} running...`);
+      if (state === 'done')    setStatus('running', `${name} complete`);
+      if (state === 'error')   setStatus('error',   `${name} failed`);
+    }
+  });
+
+  es.addEventListener('done', () => {
+    es.close();
+    btn.disabled = false;
+    clearInterval(_timer);
+    const elapsed = ((Date.now() - _startTime) / 1000).toFixed(1);
+    setStatus('done', `Pipeline finished in ${elapsed}s`);
+    document.getElementById('elapsed').textContent = `${elapsed}s`;
+    appendLog(`>> Pipeline complete (${elapsed}s)`, 'ok');
+    // Reload run history
+    setTimeout(reloadRuns, 1500);
+  });
+
+  es.addEventListener('heartbeat', () => {});
+
+  es.onerror = () => {
+    es.close();
+    btn.disabled = false;
+    clearInterval(_timer);
+    setStatus('error', 'Connection to pipeline lost');
+    appendLog('ERROR: SSE connection closed unexpectedly', 'err');
+  };
+}
+
+// ── Run history ───────────────────────────────────────────────
+async function reloadRuns() {
+  try {
+    const res  = await fetch('/api/pipeline/runs');
+    const runs = await res.json();
+    const tbody = document.getElementById('runs-tbody');
+    if (!runs.length) return;
+    tbody.innerHTML = runs.map(r => `
+      <tr>
+        <td style="font-family:'Geist Mono',monospace;font-size:11px;color:var(--muted)">${r.run_id}</td>
+        <td>${(r.started_at||'').slice(0,16).replace('T',' ')}</td>
+        <td style="font-family:'Geist Mono',monospace">${r.duration_s ? r.duration_s.toFixed(1)+'s' : '—'}</td>
+        <td>${r.candidates_found||0}</td>
+        <td>${r.interviews_scheduled||0}</td>
+        <td><span class="tag tag-${r.status||'done'}">${r.status||'done'}</span></td>
+      </tr>
+    `).join('');
+  } catch(e) {}
+}
+</script>
+</body>
+</html>

@@ -12,6 +12,7 @@ from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta
 from agents.email_monitor import EmailMonitor
+from agents.tools.pdf_parser import PDFParser
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
@@ -152,32 +153,65 @@ class AutomationAgent:
             return []
     
     def _parse_single_candidate(self, email_data: Dict[str, Any]) -> Optional[CandidateProfile]:
-        """Parse a single email into a CandidateProfile.
-        
-        Args:
-            email_data: Dictionary containing email information
-        
-        Returns:
-            CandidateProfile object or None if parsing fails
-        """
+        """Parse a single email into a CandidateProfile using PDF attachment data."""
         try:
-            # Extract basic info from email
-            name = email_data.get('sender_name', 'Unknown')
-            email = email_data.get('sender_email', '')
-            
-            # Extract skills, experience, etc. from email body/attachments
-            # This is a simplified version - you'd want more sophisticated parsing
-            resume_text = email_data.get('subject', '') + ' ' + email_data.get('snippet', '')
-            
-            candidate = CandidateProfile(
+            sender_name = email_data.get('sender_name', 'Unknown')
+            sender_email = email_data.get('sender_email', '')
+
+            name = sender_name
+            email = sender_email
+            phone = None
+            skills = []
+            experience = None
+            education = None
+            resume_text = email_data.get('subject', '')
+
+            # Parse PDF attachments for richer data
+            parser = PDFParser()
+            for attachment in email_data.get('attachments', []):
+                pdf_bytes = attachment.get('bytes')
+                if not pdf_bytes:
+                    continue
+                try:
+                    parsed = parser.parse_pdf_bytes(pdf_bytes)
+                    if 'error' in parsed:
+                        logger.warning(f"PDF parse error for {attachment['filename']}: {parsed['error']}")
+                        continue
+
+                    resume_text = parsed.get('raw_text', resume_text)
+
+                    contact = parsed.get('contact_info', {})
+                    # Prefer resume contact info over email sender when available
+                    if contact.get('email'):
+                        email = contact['email']
+                    phone = contact.get('phone')
+
+                    skills = parsed.get('skills', [])
+
+                    exp_list = parsed.get('experience', [])
+                    if exp_list:
+                        experience = ', '.join(e.get('period', '') for e in exp_list if e.get('period'))
+
+                    edu_list = parsed.get('education', [])
+                    if edu_list:
+                        education = '; '.join(e.get('degree', '') for e in edu_list if e.get('degree'))
+
+                    break  # Use first successfully parsed attachment
+                except Exception as e:
+                    logger.warning(f"Failed to parse attachment {attachment['filename']}: {e}")
+                    continue
+
+            return CandidateProfile(
                 name=name,
                 email=email,
+                phone=phone,
+                skills=skills if skills else None,
+                experience=experience,
+                education=education,
                 resume_text=resume_text,
                 status="New"
             )
-            
-            return candidate
-        
+
         except Exception as e:
             logger.error(f"Error parsing candidate data: {str(e)}")
             return None
@@ -249,6 +283,17 @@ class AutomationAgent:
                 'error': str(e)
             }
     
+    # Column headers for the candidates sheet
+    SHEET_HEADERS = [
+        "Name", "Email", "Phone",
+        "Overall Score", "Tier", "Recommendation",
+        "Technical", "Experience", "Education", "Communication",
+        "Strengths", "Gaps", "Summary",
+        "Status", "Interview Date", "Last Updated"
+    ]
+
+    SHEET_TAB = "Candidates"
+
     def update_candidate_in_sheet(
         self,
         candidate_name: str,
@@ -256,89 +301,104 @@ class AutomationAgent:
         status: str = "New",
         interview_date: str = "",
         spreadsheet_id: Optional[str] = None,
-        tab_name: str = "Candidates"
+        tab_name: str = "Candidates",
+        phone: str = "",
+        overall_score: int = 0,
+        tier: str = "",
+        recommendation: str = "",
+        technical_score: int = 0,
+        experience_score: int = 0,
+        education_score: int = 0,
+        communication_score: int = 0,
+        strengths: list = None,
+        gaps: list = None,
+        summary: str = "",
     ) -> Dict[str, Any]:
         """Update or add candidate information in Google Sheets.
-        
-        Args:
-            candidate_name: Name of the candidate
-            candidate_email: Email address of the candidate
-            status: Current status of the candidate
-            interview_date: Scheduled interview date (if any)
-            spreadsheet_id: ID of the Google Sheet (uses env var if not provided)
-            tab_name: Name of the sheet tab (default: "Candidates")
-        
+
         Returns:
             Dictionary with update result
         """
         try:
-            # Use prebuilt sheets service
             if not spreadsheet_id:
                 spreadsheet_id = os.getenv('SPREADSHEET_ID')
-            
             if not spreadsheet_id:
                 raise ValueError("No spreadsheet ID provided or found in environment")
-            
-            # Get existing data to check if candidate already exists
-            range_name = f'{tab_name}!A:G'
+
+            col_count = len(self.SHEET_HEADERS)
+            col_letter = chr(ord('A') + col_count - 1)  # e.g. 'P' for 16 columns
+            range_name = f'{tab_name}!A:{col_letter}'
+
             result = self.sheets_service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet_id,
                 range=range_name
             ).execute()
-            
             values = result.get('values', [])
-            
-            # Prepare new row data
+
+            # Write header row if sheet is empty
+            if not values:
+                self.sheets_service.spreadsheets().values().update(
+                    spreadsheetId=spreadsheet_id,
+                    range=f'{tab_name}!A1:{col_letter}1',
+                    valueInputOption='RAW',
+                    body={'values': [self.SHEET_HEADERS]}
+                ).execute()
+                values = [self.SHEET_HEADERS]
+                logger.info("Written header row to sheet")
+
+            strengths_str = "; ".join(strengths) if strengths else ""
+            gaps_str = "; ".join(gaps) if gaps else ""
+
             new_row = [
                 candidate_name,
                 candidate_email,
-                '',  # Phone (empty for now)
-                '',  # Resume link (empty for now)
+                phone,
+                overall_score if overall_score else "",
+                tier,
+                recommendation,
+                technical_score if technical_score else "",
+                experience_score if experience_score else "",
+                education_score if education_score else "",
+                communication_score if communication_score else "",
+                strengths_str,
+                gaps_str,
+                summary,
                 status,
                 interview_date,
-                f'Auto-updated at {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             ]
-            
-            # Check if candidate already exists
+
+            # Find existing row by email (column B = index 1)
             candidate_row = None
-            for idx, row in enumerate(values[1:], start=2):  # Skip header row
+            for idx, row in enumerate(values[1:], start=2):
                 if len(row) > 1 and row[1] == candidate_email:
                     candidate_row = idx
                     break
-            
+
             if candidate_row:
-                # Update existing row
-                update_range = f'{tab_name}!A{candidate_row}:G{candidate_row}'
-                body = {'values': [new_row]}
                 self.sheets_service.spreadsheets().values().update(
                     spreadsheetId=spreadsheet_id,
-                    range=update_range,
+                    range=f'{tab_name}!A{candidate_row}:{col_letter}{candidate_row}',
                     valueInputOption='RAW',
-                    body=body
+                    body={'values': [new_row]}
                 ).execute()
-                logger.info(f"Updated existing candidate {candidate_name} in row {candidate_row}")
+                logger.info(f"Updated candidate {candidate_name} in row {candidate_row}")
             else:
-                # Append new row
-                append_range = f'{tab_name}!A:G'
-                body = {'values': [new_row]}
                 self.sheets_service.spreadsheets().values().append(
                     spreadsheetId=spreadsheet_id,
-                    range=append_range,
+                    range=f'{tab_name}!A:{col_letter}',
                     valueInputOption='RAW',
                     insertDataOption='INSERT_ROWS',
-                    body=body
+                    body={'values': [new_row]}
                 ).execute()
-                logger.info(f"Added new candidate {candidate_name} to sheet")
-            
+                logger.info(f"Added candidate {candidate_name} to sheet")
+
             return {
                 'success': True,
                 'action': 'updated' if candidate_row else 'added',
                 'row': candidate_row if candidate_row else len(values) + 1
             }
-        
+
         except Exception as e:
             logger.error(f"Error updating candidate in sheet: {str(e)}")
-            return {
-                'success': False,
-                'error': str(e)
-            }
+            return {'success': False, 'error': str(e)}

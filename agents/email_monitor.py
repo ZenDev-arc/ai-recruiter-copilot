@@ -2,7 +2,7 @@ import os
 import base64
 import re
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
@@ -85,9 +85,14 @@ class EmailMonitor:
             start_date = now - timedelta(days=days_back)
             date_query = start_date.strftime('%Y/%m/%d')  # Format: YYYY/MM/DD for Gmail API
             
-            # Step 2: Build Gmail search query
-            # Search for: has attachment, after specific date, in inbox
-            query = f'has:attachment after:{date_query} in:inbox'
+            # Step 2: Build Gmail search query — subject OR body keywords
+            query = (
+                f'has:attachment after:{date_query} in:inbox '
+                f'(subject:resume OR subject:cv OR subject:application OR subject:"job application" '
+                f'OR subject:"applying for" OR subject:candidate OR subject:"cover letter" '
+                f'OR body:resume OR body:"cover letter" OR body:"years of experience" '
+                f'OR body:"i am applying" OR body:"please find attached")'
+            )
             
             print(f"Searching for emails with attachments since {date_query}...")
             
@@ -136,19 +141,28 @@ class EmailMonitor:
                         for part in parts_list:
                             if part.get('filename'):
                                 filename = part['filename']
-                                # Filter: Only select attachments with 'Resume' in filename (case-insensitive)
-                                # This ensures only files explicitly named as resumes are processed,
-                                # ignoring other PDF/DOC/DOCX attachments that may not be resumes
-                                if 'resume' in filename.lower() and filename.lower().endswith(('.pdf', '.doc', '.docx')):
+                                if filename.lower().endswith(('.pdf', '.doc', '.docx')):
+                                    attachment_id = part['body'].get('attachmentId')
+                                    pdf_bytes = None
+                                    if attachment_id:
+                                        try:
+                                            att = self.service.users().messages().attachments().get(
+                                                userId='me',
+                                                messageId=msg['id'],
+                                                id=attachment_id
+                                            ).execute()
+                                            pdf_bytes = base64.urlsafe_b64decode(att['data'])
+                                        except Exception as e:
+                                            print(f"Error downloading attachment {filename}: {e}")
                                     attachments.append({
                                         'filename': filename,
                                         'mimeType': part.get('mimeType', ''),
-                                        'size': part.get('body', {}).get('size', 0)
+                                        'size': part.get('body', {}).get('size', 0),
+                                        'bytes': pdf_bytes
                                     })
-                            # Recursively check nested parts
                             if part.get('parts'):
                                 extract_attachments(part['parts'])
-                    
+
                     extract_attachments(parts)
                     
                     # Step 6: Build candidate info dictionary
